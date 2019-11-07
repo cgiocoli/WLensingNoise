@@ -6,7 +6,7 @@
 #####################################################
 
 # executable name
-PROG = $(HOME)/bin/CreateWLNoise-0.9
+PROG = $(HOME)/bin/CreateWLNoise-0.91
 
 PROG2 = $(HOME)/bin/CreateWLNoise_CoDECS_TEST_gsl
 

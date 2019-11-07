@@ -5,36 +5,35 @@
 int MULTIPLIER=3;
 int DIVISOR=7;
 
+
+
+
 double* getkappanoise3(std:: vector<double> Pklin, std:: vector<double> llin,
 		       double boxlrad,int npix, std:: valarray<float> map,
 		       std:: vector<double> Pk, std:: vector<double> l,
 		       double filter,long seedi){
   
   double sigmag = filter*M_PI/180.;  
-  // generate a random map for the noise
+  // generate a map for the noise
   double *input=new double[npix*npix];
   fftw_complex *output=new fftw_complex[npix*(npix/2+1)];
   for (int i=0; i<npix*npix; i++) input[i] = double(map[i]);
   fftw_plan pforward;  
   pforward=fftw_plan_dft_r2c_2d(npix,npix,input,output,FFTW_ESTIMATE);
   fftw_execute( pforward );
+  // this part is here to initialize the output map
   
   gsl_rng *r = gsl_rng_alloc(gsl_rng_mt19937);
-
   double mean = 0.0;
   double stddev  = 1.0;
   std::normal_distribution<double> normal(mean, stddev);
-  std:: minstd_rand generator,generator2;  
+
   long seed = time(NULL) + MULTIPLIER * clock() % DIVISOR;
   if(seedi>0){
     seed = seedi;
     gsl_rng_set(r,seed);
-    generator.seed(seed);
-    generator2.seed(seed);    
   }else{
     gsl_rng_set(r,34872); // <--- if you want to set the seed by hand
-    generator.seed(34872);
-    generator2.seed(34872);    
   }
   int i,j,ii;
   double k_dir[2];
@@ -59,35 +58,30 @@ double* getkappanoise3(std:: vector<double> Pklin, std:: vector<double> llin,
 	kappak[ii][1] = 0.0;
       }
       else{
-	p = getY(llin,Pklin,lmag);
-	
-	//double gg = (normal(generator));
-
+	p = getY(llin,Pklin,lmag);       
+ 	// double gg = (normal(generator));
 	value = fabs(gsl_ran_ugaussian(r)) * sqrt(p) * K;
-
-	// value = fabs(gsl_ran_lognormal(r,0.,sqrt(p)*K) - 1);
-
 	//value = gg * sqrt(p) * K;		
 	phase = 2.0 * M_PI * gsl_rng_uniform(r);
-
-	double fase0,fase1;		       	
-
+	double fase0,fase1;
+	// this is different from 0 if you want to create a map in phase with the input
 	double val0 = sqrt(output[ii][0]*output[ii][0] + output[ii][1]*output[ii][1]);
-
 	if(val0>1e-170){
+	  // in phase
 	  fase0 = output[ii][0]/val0;
 	  fase1 = output[ii][1]/val0;
 	  phase = atan2(fase1,fase0);
 	  fase0 = cos(phase);
 	  fase1 = sin(phase);
 	}else{
+	  // random
 	  fase0 = cos(phase);
 	  fase1 = sin(phase);		  
 	}
-	
+	// set the value
 	kappak[ii][0] = value * fase0;
-	kappak[ii][1] = value * fase1;	
-	
+	kappak[ii][1] = value * fase1;		
+
 	if(fase0!=fase0){
 	  std:: cout << fase0 << "  " << fase1 << std:: endl;	  
 	  exit(1);
@@ -117,21 +111,19 @@ double* getkappanoise3(std:: vector<double> Pklin, std:: vector<double> llin,
   for(int j=0;j<npix;j++) for(int i=0;i<npix;i++) {
       mapt[i+npix*j] = map[i+npix*j] + kappa[i+npix*j];
       mapkappa[i+npix*j] = kappa[i+npix*j];
-    }
-  // compute the power spectrum
+    }  
+  // compute the power spectrum of the sum
   double *lt;
   double *Plt;
   int nb = l.size();
   lt=new double[nb];
-  Plt=new double[nb];  
-  
+  Plt=new double[nb];   
   powerl(mapt,mapt,npix,npix,boxlrad,boxlrad,lt,Plt,nb);
-
+  // compute the power spectrum of the gaussian linear map
   double *l0;
   double *Pl0;
   l0=new double[nb];
   Pl0=new double[nb];  
-  
   powerl(mapkappa,mapkappa,npix,npix,boxlrad,boxlrad,l0,Pl0,nb);
   
   std:: vector<double> A,lA;
@@ -146,6 +138,7 @@ double* getkappanoise3(std:: vector<double> Pklin, std:: vector<double> llin,
   }
 
   std:: cout << " done .... map " << std:: endl;
+
   gsl_rng *rr = gsl_rng_alloc(gsl_rng_mt19937);
   // now build the map considering the factor
   if(seedi>0){
@@ -153,9 +146,9 @@ double* getkappanoise3(std:: vector<double> Pklin, std:: vector<double> llin,
     gsl_rng_set(rr,seed);     
   }else{
     gsl_rng_set(rr,34872); // <--- if you want to set the seed by hand
-  }
+  }  
+  std:: cout << " seed reset " << std:: endl;
   
-  std:: cout << " reset seed " << std:: endl;
   for (i=0; i<npix; i++) for (j=0; j<npix/2+1; j++){
       if(i < npix / 2) k_dir[0] = i*K;
       else k_dir[0] = -(npix-i)*K;
@@ -171,34 +164,26 @@ double* getkappanoise3(std:: vector<double> Pklin, std:: vector<double> llin,
       else{
 	p = getY(llin,Pklin,lmag);
 	double pfactor = getY(lA,A,lmag);
-
 	//double gg = normal(generator2);
-
-	//value = gg * sqrt(p*pfactor) * K;			
-	
 	value = fabs(gsl_ran_ugaussian(rr)) * sqrt(p*pfactor) * K;
-	
-	// value = fabs(gsl_ran_lognormal(r,0.,sqrt(p*pfactor)*K) - 1);	
+	//value = gg * sqrt(p*pfactor) * K;	
 	phase = 2.0 * M_PI * gsl_rng_uniform(rr);
-
 	double fase0,fase1;
-	
+	// this is different from 0 if you want to create a map in phase with the input	
 	double val0 = sqrt(output[ii][0]*output[ii][0] + output[ii][1]*output[ii][1]);
-
-	if(val0>1e-170){	
+	if(val0>1e-170){
+	  // in phase
 	  fase0 = output[ii][0]/val0;
 	  fase1 = output[ii][1]/val0;
 	  phase = atan2(fase1,fase0);
 	  fase0 = cos(phase);
 	  fase1 = sin(phase);
 	}else{
+	  // random
 	  fase0 = cos(phase);
 	  fase1 = sin(phase);		  
 	}
-	// no smoothing
-	//kappak[ii][0] = value * fase0;
-	//kappak[ii][1] = value * fase1;
-	// apply smoothing
+	// apply smoothing if larger than 0
 	kappak[ii][0] = value * fase0 * exp(-2*M_PI*M_PI*lmag*lmag*sigmag*sigmag);
 	kappak[ii][1] = value * fase1 * exp(-2*M_PI*M_PI*lmag*lmag*sigmag*sigmag);
 	
@@ -240,15 +225,9 @@ double* getkappanoise(std:: vector<double> Pklin, std:: vector<double> llin,
 
   // generate a random map for the noise
   fftw_complex *output=new fftw_complex[npix*(npix/2+1)];
-  //for (int i=0; i<npix*npix; i++) input[i] = double(map[i]);
-  //fftw_plan pforward;  
-  //pforward=fftw_plan_dft_r2c_2d(npix,npix,input,output,FFTW_ESTIMATE);
-  //fftw_execute( pforward );
+  // this part initialize the output map all zero
   
-  gsl_rng *r = gsl_rng_alloc(gsl_rng_mt19937);
-
-  //  std::mt19937 generator;
-  std:: minstd_rand generator;
+  gsl_rng *r = gsl_rng_alloc(gsl_rng_mt19937);  
   double mean = 0.0;
   double stddev  = 1.0;
   std::normal_distribution<double> normal(mean, stddev);
@@ -284,28 +263,25 @@ double* getkappanoise(std:: vector<double> Pklin, std:: vector<double> llin,
       }
       else{
 	p = getY(llin,Pklin,lmag);
-
-	double gg = normal(generator);
-     
+	// double gg = normal(generator);
 	value = fabs(gsl_ran_ugaussian(r)) * sqrt(p) * K;
 	// value = fabs(gg) * sqrt(p) * K;	
 	phase = 2.0 * M_PI * gsl_rng_uniform(r);
-
-	double fase0,fase1;		       	
-
+	double fase0,fase1;
+	// in this cae val0 is always 0	
 	double val0 = sqrt(output[ii][0]*output[ii][0] + output[ii][1]*output[ii][1]);
-
-	if(val0>1e-170){	  
+	if(val0>1e-170){
+	  //  in phase
 	  fase0 = output[ii][0]/val0;
 	  fase1 = output[ii][1]/val0;
 	  phase = atan2(fase1,fase0);
 	  fase0 = cos(phase);
 	  fase1 = sin(phase);
 	}else{
+	  // random
 	  fase0 = cos(phase);
 	  fase1 = sin(phase);		  
-	}
-	
+	}	
 	kappak[ii][0] = value * fase0;
 	kappak[ii][1] = value * fase1;	
 	
